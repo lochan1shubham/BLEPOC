@@ -1,8 +1,10 @@
 package com.example.blepuc.view
 
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.Looper
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -12,21 +14,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.blepuc.service.BluetoothLeService
 import com.example.blepuc.ui.theme.BlePucTheme
+import com.example.blepuc.util.BleBroadcastReceiver
 import com.example.blepuc.util.Permission
 import com.example.blepuc.vm.MainViewmodel
 
 private const val TAG = "MainActivity"
 
 class MainActivity : BaseActivity() {
-
+    val gattUpdateReceiver = BleBroadcastReceiver()
 
     @RequiresApi(Build.VERSION_CODES.S)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -34,18 +34,14 @@ class MainActivity : BaseActivity() {
         enableEdgeToEdge()
         setContent {
             val viewmodel: MainViewmodel = viewModel()
-            val bleDevices = viewmodel.bleDeviceList.observeAsState(null)
+//            val bleDevices = viewmodel.bleDeviceList.observeAsState(null)
 
-            LaunchedEffect(Unit) {
-                bleSupportAndRequestPermission(viewmodel)
-            }
             BlePucTheme {
                 Scaffold(
-                    modifier = Modifier
-                        .fillMaxSize()
+                    modifier = Modifier.fillMaxSize()
                 ) { innerPadding ->
                     if (Permission.checkBluetoothEnabled(this)) {
-
+                        bleSupportAndRequestPermission()
 //                        if (Permission.checkBlePermissions(this)) {
 //                            viewmodel.scanLeDevice()
                         Greeting(
@@ -61,22 +57,13 @@ class MainActivity : BaseActivity() {
                                     blePermissionsRequest
                                 )
                             },
-                            viewmodel = viewmodel
-                        )
-//                        } else {
-//                            Column(
-//                                modifier = Modifier
-//                                    .fillMaxSize()
-//                                    .padding(16.dp)
-//                            ) {
-//                                Text(
-//                                    text = "No permission"
-//                                )
-//                            }
-//                        }
+                            viewmodel = viewmodel,
+                            gattUpdateReceiver = gattUpdateReceiver,
+                            onDeviceSelected = { address -> onDeviceSelected(address) })
                     } else {
                         Column(
                             modifier = Modifier
+                                .padding(innerPadding)
                                 .fillMaxSize()
                                 .padding(16.dp)
                         ) {
@@ -87,18 +74,23 @@ class MainActivity : BaseActivity() {
                     }
                 }
             }
-
-            if (bleDevices.value != null) {
-                // Code to manage Service lifecycle.
-                setupServiceConnection(bleDevices.value!!.address)
-                registerBroadcast(bleDevices.value!!.address)
-            }
         }
+    }
 
+    private fun onDeviceSelected(address: String) {
+        if (gattUpdateReceiver.isOrderedBroadcast) {
+            unregisterReceiver(gattUpdateReceiver)
+        }
+        registerBroadcast(address, gattUpdateReceiver)
+        val serviceConnection = setupServiceConnection(address)
+        android.os.Handler(Looper.getMainLooper()).postDelayed({
+            val gattServiceIntent = Intent(this, BluetoothLeService::class.java)
+            bindService(gattServiceIntent, serviceConnection, BIND_AUTO_CREATE)
+        }, 3000)
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
-    private fun bleSupportAndRequestPermission(viewmodel: MainViewmodel) {
+    private fun bleSupportAndRequestPermission() {
         when {
             !Permission.checkBleSupport(this) -> {
                 Toast.makeText(this, "BLE not supported", Toast.LENGTH_SHORT).show()
@@ -107,26 +99,9 @@ class MainActivity : BaseActivity() {
             !Permission.checkBlePermissions(this) -> {
                 Permission.requestAllBlePermissions(blePermissionsRequest)
             }
-
-            else -> {
-                viewmodel.scanLeDevice()
-                //registerBroadcast(bleDevices.value!!.address)
-            }
         }
     }
 
-//    @RequiresApi(Build.VERSION_CODES.S)
-//    override fun onResume() {
-//        super.onResume()
-//        bleSupportAndRequestPermission()
-////        if (Permission.checkBlePermissions(this)) {
-////            android.os.Handler(Looper.getMainLooper()).postDelayed({
-////                val gattServiceIntent = Intent(this, BluetoothLeService::class.java)
-////                bindService(gattServiceIntent, serviceConnection, BIND_AUTO_CREATE)
-////            }, 3000)
-////        }
-//
-//    }
 
     override fun onPause() {
         super.onPause()
@@ -135,17 +110,3 @@ class MainActivity : BaseActivity() {
         }
     }
 }
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    BlePucTheme {
-        Greeting(
-            "Android",
-            requestLocationPermissions = {},
-            requestPermissionBluetooth = {},
-            viewmodel = MainViewmodel()
-        )
-    }
-}
-

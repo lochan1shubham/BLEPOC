@@ -17,16 +17,20 @@ import android.os.Binder
 import android.os.IBinder
 import android.util.Log
 import androidx.annotation.RequiresPermission
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import com.example.blepuc.util.TestInterface
 import java.util.UUID
 
 
 private const val TAG = "BluetoothLeService"
 
-open class BluetoothLeService : Service() {
+class BluetoothLeService : Service() {
     private val binder = LocalBinder()
     private var bluetoothGatt: BluetoothGatt? = null
     private var mBluetoothGattService: BluetoothGattService? = null
     private var bluetoothAdapter: BluetoothAdapter? = null
+
 
     companion object {
         const val STATE_DISCONNECTED: Int = 0
@@ -36,25 +40,18 @@ open class BluetoothLeService : Service() {
         const val STATE_CONNECTED: Int = 2
 
         const val ACTION_GATT_CONNECTED: String =
-            "riz.com.bletest.BluetoothLeServices.ACTION_GATT_CONNECTED"
+            "com.example.blepuc.service.BluetoothLeServices.ACTION_GATT_CONNECTED"
 
         const val ACTION_GATT_DISCONNECTED: String =
-            "riz.com.bletest.BluetoothLeServices.ACTION_GATT_DISCONNECTED"
+            "com.example.blepuc.service.BluetoothLeServices.ACTION_GATT_DISCONNECTED"
 
         const val ACTION_GATT_SERVICES_DISCOVERED: String =
-            "riz.com.bletest.BluetoothLeServices.ACTION_GATT_SERVICES_DISCOVERED"
+            "com.example.blepuc.service.BluetoothLeServices.ACTION_GATT_SERVICES_DISCOVERED"
 
         const val ACTION_DATA_AVAILABLE: String =
-            "riz.com.bletest.BluetoothLeServices.ACTION_DATA_AVAILABLE"
+            "com.example.blepuc.service.BluetoothLeServices.ACTION_DATA_AVAILABLE"
 
-        const val EXTRA_DATA: String = "riz.com.bletest.BluetoothLeServices.EXTRA_DATA"
-
-
-        val uuid_service: UUID = UUID.fromString("00002220-0000-1000-8000-00805f9b34fb")
-
-        val uuid_recieve: UUID = UUID.fromString("00002221-0000-1000-8000-00805f9b34fb")
-
-        val uuid_config: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+        const val EXTRA_DATA: String = "com.example.blepuc.service.BluetoothLeServices.EXTRA_DATA"
     }
 
     override fun onBind(intent: Intent): IBinder? {
@@ -103,8 +100,8 @@ open class BluetoothLeService : Service() {
 
     private var connectionState = STATE_DISCONNECTED
 
-    fun getSupportedGattServices(): List<BluetoothGattService?>? {
-        return bluetoothGatt?.services
+    fun getSupportedGattServices(): BluetoothGatt? {
+        return bluetoothGatt
     }
 
     private val bluetoothGattCallback: BluetoothGattCallback = object : BluetoothGattCallback() {
@@ -144,7 +141,7 @@ open class BluetoothLeService : Service() {
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
         override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
-                broadcastUpdate(ACTION_DATA_AVAILABLE)
+                broadcastUpdate(ACTION_GATT_SERVICES_DISCOVERED)
                 //  mBluetoothGattService = gatt!!.getService(uuid_service)
             } else {
                 Log.w(TAG, "onServicesDiscovered received: " + status)
@@ -178,7 +175,7 @@ open class BluetoothLeService : Service() {
 
         // This is special handling for the Heart Rate Measurement profile. Data
         // parsing is carried out as per profile specifications.
-        if (uuid_service.equals(characteristic.getUuid())) {
+//        if (uuid_service.equals(characteristic.getUuid())) {
             val flag = characteristic.getProperties()
             var format = -1
             if ((flag and 0x01) != 0) {
@@ -190,19 +187,20 @@ open class BluetoothLeService : Service() {
             }
             val heartRate = characteristic.getIntValue(format, 1)
             Log.d(TAG, String.format("Received heart rate: %d", heartRate))
+        //mData.postValue(5)
             intent.putExtra(EXTRA_DATA, heartRate.toString())
-        } else {
-            // For all other profiles, writes the data formatted in HEX.
-            val data = characteristic.getValue()
-            if (data != null && data.size > 0) {
-                val stringBuilder = StringBuilder(data.size)
-                for (byteChar in data) stringBuilder.append(String.format("%02X ", byteChar))
-                intent.putExtra(
-                    EXTRA_DATA, String(data) + "\n" +
-                            stringBuilder.toString()
-                )
-            }
-        }
-        sendBroadcast(intent, Manifest.permission.BLUETOOTH)
+//        } else {
+//            // For all other profiles, writes the data formatted in HEX.
+//            val data = characteristic.getValue()
+//            if (data != null && data.size > 0) {
+//                val stringBuilder = StringBuilder(data.size)
+//                for (byteChar in data) stringBuilder.append(String.format("%02X ", byteChar))
+//                intent.putExtra(
+//                    EXTRA_DATA, String(data) + "\n" +
+//                            stringBuilder.toString()
+//                )
+//            }
+//        }
+        sendBroadcast(intent)
     }
 }
